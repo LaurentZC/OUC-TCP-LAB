@@ -9,7 +9,7 @@ import com.ouc.tcp.client.TCP_Sender_ADT;
 import com.ouc.tcp.message.TCP_PACKET;
 
 public class TCP_Sender extends TCP_Sender_ADT {
-    // 待发送的TCP数据报
+    // 待发送的 TCP 数据报
     private TCP_PACKET tcpPack;
     private volatile int flag = 0;
 
@@ -49,7 +49,7 @@ public class TCP_Sender extends TCP_Sender_ADT {
     // 不可靠发送：将打包好的 TCP 数据报通过不可靠传输信道发送；仅需修改错误标志
     public void udt_send(TCP_PACKET stcpPack) {
         // 设置错误控制标志
-        tcpH.setTh_eflag((byte) 0);
+        tcpH.setTh_eflag((byte) 1);
         // System.out.println("to send: "+stcpPack.getTcpH().getTh_seq());
         // 发送数据报
         client.send(stcpPack);
