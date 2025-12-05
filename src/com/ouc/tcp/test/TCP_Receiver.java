@@ -1,41 +1,46 @@
-/***************************2.1: ACK/NACK*****************/
-/***** Feng Hong; 2015-12-09******************************/
+/**
+ * 2.1: ACK/NACK
+ * Feng Hong; 2015-12-09
+ */
+
 package com.ouc.tcp.test;
+
+import com.ouc.tcp.client.TCP_Receiver_ADT;
+import com.ouc.tcp.message.TCP_PACKET;
 
 import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
 
-import com.ouc.tcp.client.TCP_Receiver_ADT;
-import com.ouc.tcp.message.*;
-import com.ouc.tcp.tool.TCP_TOOL;
-
 public class TCP_Receiver extends TCP_Receiver_ADT {
+    // 用于记录当前待接收的包序号，注意包序号不完全是
+    int sequence = 1;
 
-    //回复的ACK报文段
-    int sequence = 1;//用于记录当前待接收的包序号，注意包序号不完全是
-
-    /*构造函数*/
+    /* 构造函数 */
     public TCP_Receiver() {
-        super();    //调用超类构造函数
-        super.initTCP_Receiver(this);    //初始化TCP接收端
+        // 调用超类构造函数
+        super();
+        // 初始化 TCP 接收端
+        super.initTCP_Receiver(this);
     }
 
     @Override
     //接收到数据报：检查校验和，设置回复的ACK报文段
     public void rdt_recv(TCP_PACKET recvPack) {
+        // 回复的 ACK 报文段
         TCP_PACKET ackPack;
-        //检查校验码，生成ACK
+
+        // 检查校验码，生成 ACK
         if (CheckSum.computeChkSum(recvPack) == recvPack.getTcpH().getTh_sum()) {
-            //生成ACK报文段（设置确认号）
+            // 生成 ACK 报文段（设置确认号）
             tcpH.setTh_ack(recvPack.getTcpH().getTh_seq());
             ackPack = new TCP_PACKET(tcpH, tcpS, recvPack.getSourceAddr());
             tcpH.setTh_sum(CheckSum.computeChkSum(ackPack));
-            //回复ACK报文段
+            //回复 ACK 报文段
             reply(ackPack);
 
-            //将接收到的正确有序的数据插入data队列，准备交付
+            // 将接收到的正确有序的数据插入 data 队列，准备交付
             dataQueue.add(recvPack.getTcpS().getData());
             sequence++;
         } else {
@@ -45,36 +50,36 @@ public class TCP_Receiver extends TCP_Receiver_ADT {
             tcpH.setTh_ack(-1);
             ackPack = new TCP_PACKET(tcpH, tcpS, recvPack.getSourceAddr());
             tcpH.setTh_sum(CheckSum.computeChkSum(ackPack));
-            //回复ACK报文段
+            // 回复 ACK 报文段
             reply(ackPack);
         }
 
         System.out.println();
 
 
-        //交付数据（每20组数据交付一次）
+        // 交付数据（每 20 组数据交付一次）
         if (dataQueue.size() == 20)
             deliver_data();
     }
 
     @Override
-    //交付数据（将数据写入文件）；不需要修改
+    // 交付数据（将数据写入文件）；不需要修改
     public void deliver_data() {
-        //检查dataQueue，将数据写入文件
+        // 检查 dataQueue，将数据写入文件
         File fw = new File("recvData.txt");
 
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(fw, true))) {
 
-            //循环检查data队列中是否有新交付数据
+            // 循环检查 data 队列中是否有新交付数据
             while (!dataQueue.isEmpty()) {
                 int[] data = dataQueue.poll();
 
-                //将数据写入文件
+                // 将数据写入文件
                 for (int datum : data) {
                     writer.write(datum + "\n");
                 }
-
-                writer.flush();        //清空输出缓存
+                // 清空输出缓存
+                writer.flush();
             }
         } catch (IOException e) {
             // TODO Auto-generated catch block
@@ -83,12 +88,13 @@ public class TCP_Receiver extends TCP_Receiver_ADT {
     }
 
     @Override
-    //回复ACK报文段
+    // 回复 ACK 报文段
     public void reply(TCP_PACKET replyPack) {
-        //设置错误控制标志
-        tcpH.setTh_eflag((byte) 0);    //eFlag=0，信道无错误
+        // 设置错误控制标志
+        // eFlag=0，信道无错误
+        tcpH.setTh_eflag((byte) 0);
 
-        //发送数据报
+        // 发送数据报
         client.send(replyPack);
     }
 
