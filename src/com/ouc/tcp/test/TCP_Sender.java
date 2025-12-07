@@ -6,12 +6,16 @@
 package com.ouc.tcp.test;
 
 import com.ouc.tcp.client.TCP_Sender_ADT;
+import com.ouc.tcp.client.UDT_RetransTask;
+import com.ouc.tcp.client.UDT_Timer;
 import com.ouc.tcp.message.TCP_PACKET;
 
 public class TCP_Sender extends TCP_Sender_ADT {
     // 待发送的 TCP 数据报
     private TCP_PACKET tcpPack;
     private volatile int flag = 0;
+    // 计时器
+    private UDT_Timer timer;
 
     /* 构造函数 */
     public TCP_Sender() {
@@ -34,6 +38,13 @@ public class TCP_Sender extends TCP_Sender_ADT {
         tcpH.setTh_sum(CheckSum.computeChkSum(tcpPack));
         tcpPack.setTcpH(tcpH);
 
+        // 为该数据报启动计时器
+        timer = new UDT_Timer();
+        // 创建重传任务
+        UDT_RetransTask task = new UDT_RetransTask(client, tcpPack);
+        // 启动定时器，1s 后第一次执行，以后每隔 1s 执行一次
+        timer.schedule(task, 1000, 1000);
+
         // 发送 TCP 数据报
         udt_send(tcpPack);
         flag = 0;
@@ -49,7 +60,7 @@ public class TCP_Sender extends TCP_Sender_ADT {
     // 不可靠发送：将打包好的 TCP 数据报通过不可靠传输信道发送；仅需修改错误标志
     public void udt_send(TCP_PACKET stcpPack) {
         // 设置错误控制标志
-        tcpH.setTh_eflag((byte) 1);
+        tcpH.setTh_eflag((byte) 7);
         // System.out.println("to send: "+stcpPack.getTcpH().getTh_seq());
         // 发送数据报
         client.send(stcpPack);
@@ -65,15 +76,14 @@ public class TCP_Sender extends TCP_Sender_ADT {
         }
 
         int currentAck = ackQueue.poll();
-        // System.out.println("CurrentAck: "+currentAck);
+        // System.out.println("CurrentAck: " + currentAck);
         if (currentAck == tcpPack.getTcpH().getTh_seq()) {
             System.out.println("Clear: " + tcpPack.getTcpH().getTh_seq());
+            // 停止计时器
+            timer.cancel();
             flag = 1;
-        } else {
-            System.out.println("Retransmit: " + tcpPack.getTcpH().getTh_seq());
-            udt_send(tcpPack);
-            flag = 0;
         }
+        // 如果确认号不匹配，由计时器触发重传
     }
 
     @Override
