@@ -46,8 +46,8 @@ public class TCP_Sender extends TCP_Sender_ADT {
         timer = new UDT_Timer();
         // 创建重传任务
         UDT_RetransTask task = new UDT_RetransTask(client, tcpPack);
-        // 启动定时器，3s 后第一次执行，以后每隔 3s 执行一次
-        timer.schedule(task, 3000, 3000);
+        // 启动定时器，1s 后第一次执行，以后每隔 1s 执行一次
+        timer.schedule(task, 1000, 1000);
 
         // 等待 ACK 报文
         // waitACK();
