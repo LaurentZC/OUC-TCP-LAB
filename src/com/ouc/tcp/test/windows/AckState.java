@@ -11,5 +11,15 @@ public enum AckState {
     ORDERED,
     DISORDERED,
     DUPLICATE,
-    BASE
+    BASE;
+
+    @Override
+    public String toString() {
+        return switch (this) {
+            case ORDERED -> "有序到达";
+            case DISORDERED -> "无序到达";
+            case DUPLICATE -> "重复到达";
+            case BASE -> "到达窗口左沿，准备交付";
+        };
+    }
 }

@@ -6,6 +6,7 @@
 package com.ouc.tcp.test;
 
 import com.ouc.tcp.client.TCP_Receiver_ADT;
+import com.ouc.tcp.client.UDT_Timer;
 import com.ouc.tcp.message.TCP_PACKET;
 import com.ouc.tcp.test.windows.AckState;
 import com.ouc.tcp.test.windows.ReceiverWindow;
@@ -14,10 +15,13 @@ import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.util.TimerTask;
 
 public class TCP_Receiver extends TCP_Receiver_ADT {
+    TCP_PACKET ackPack;
     // 接收者窗口
     private final ReceiverWindow window = new ReceiverWindow(16);
+    private UDT_Timer timer = new UDT_Timer();
 
     /* 构造函数 */
     public TCP_Receiver() {
@@ -28,38 +32,55 @@ public class TCP_Receiver extends TCP_Receiver_ADT {
     }
 
     @Override
-// 接收到数据报：检查校验和，设置回复的 ACK 报文段
+    // 接收到数据报：检查校验和，设置回复的 ACK 报文段
     public void rdt_recv(TCP_PACKET recvPack) {
-        // 回复的 ACK 报文段（在需要时构造并发送）
-        TCP_PACKET ackPack;
-
         // 校验和检查：若校验失败则丢弃该报文段
         if (CheckSum.computeChkSum(recvPack) != recvPack.getTcpH().getTh_sum()) {
+            System.out.println("Checksum error, packet discarded.");
             return;
         }
 
         // 将接收到的包放入接收窗口缓冲，获得缓冲处理结果
-        int bufferResult = window.bufferPacker(recvPack);
-        System.out.println("Buffering result: " + bufferResult);
+        AckState bufferResult = window.bufferPacket(recvPack);
+        System.out.println("Buffering result: 包 " + recvPack.getTcpH().getTh_seq() + " " + bufferResult);
 
-        // 若包是有序到达、重复包或是基序号的包，均需回复 ACK
-        if (bufferResult == AckState.ORDERED.ordinal() ||
-                bufferResult == AckState.DUPLICATE.ordinal() ||
-                bufferResult == AckState.BASE.ordinal()) {
-            // 将 ACK 字段设为收到包的序号，构造并发送 ACK 报文
-            tcpH.setTh_ack(recvPack.getTcpH().getTh_seq());
-            ackPack = new TCP_PACKET(tcpH, tcpS, recvPack.getSourceAddr());
-            tcpH.setTh_sum(CheckSum.computeChkSum(ackPack));
-            reply(ackPack);
-        }
-
-        // 如果接收到了基序号的包，将窗口中可交付的数据包的数据放入交付队列
-        if (bufferResult == AckState.BASE.ordinal()) {
+        // 如果是窗口左边界的数据包，计时 500ms 等到其他包
+        if (bufferResult == AckState.BASE) {
+            // 处理所有可交付的数据包
             TCP_PACKET packet = window.getPacketToDeliver();
+            int lastAckSeq = -1;
+
             while (packet != null) {
+                // 提取数据并放入交付队列
                 dataQueue.add(packet.getTcpS().getData());
+                // 记录最后一个交付的数据包的序号
+                lastAckSeq = packet.getTcpH().getTh_seq();
+                // 获取下一个可交付的数据包
                 packet = window.getPacketToDeliver();
             }
+
+            // 准备 ACK 报文段
+            tcpH.setTh_ack(lastAckSeq);
+            ackPack = new TCP_PACKET(tcpH, tcpS, recvPack.getSourceAddr());
+            tcpH.setTh_sum(CheckSum.computeChkSum(ackPack));
+
+            // 设置延迟 ACK
+            if (timer != null) {
+                timer.cancel();
+                timer = new UDT_Timer();
+                timer.schedule(
+                        new TimerTask() {
+                            @Override
+                            public void run() {
+                                reply(ackPack);
+                            }
+                        }, 500
+                );
+            }
+        }
+        // 对于无序到达的数据包，立即发送 ACK
+        else if (bufferResult != AckState.ORDERED) {
+            reply(ackPack);
         }
 
         System.out.println();

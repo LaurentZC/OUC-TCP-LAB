@@ -49,8 +49,8 @@ public class ReceiverWindow extends SlidingWindow<ReceiverElement> {
         window[getIdx(base)].reset();
         // 滑动窗口基序号
         base++;
-
-        return packet;  // 返回可交付的数据包
+        // 返回可交付的数据包
+        return packet;
     }
 
     /**
@@ -60,20 +60,20 @@ public class ReceiverWindow extends SlidingWindow<ReceiverElement> {
      * @param packet 接收到的 TCP 数据包
      * @return 数据包到达状态对应的枚举值
      */
-    public int bufferPacker(TCP_PACKET packet) {
+    public AckState bufferPacket(TCP_PACKET packet) {
         // 计算数据包序号（从 1 开始的逻辑序号转换为窗口内的相对序号）
         int seq = (packet.getTcpH().getTh_seq() - 1) / packet.getTcpS().getData().length;
 
         // 情况 1：数据包序号超出接收窗口范围
         if (seq >= base + size) {
             // 数据包超出窗口右边界，可能是未来数据包
-            return AckState.DISORDERED.ordinal();  // 返回无序到达状态
+            return AckState.DISORDERED;  // 返回无序到达状态
         }
 
         // 情况2：数据包序号小于窗口基序号
         if (seq < base) {
             // 数据包序号在窗口左边界之前，可能是重复或过时数据包
-            return AckState.DUPLICATE.ordinal();  // 返回重复到达状态
+            return AckState.DUPLICATE;  // 返回重复到达状态
         }
 
         // 情况 3&4：数据包序号在窗口范围内
@@ -83,10 +83,10 @@ public class ReceiverWindow extends SlidingWindow<ReceiverElement> {
         // 情况4：数据包序号正好等于窗口基序号
         if (seq == base) {
             // 这是期望的下一个数据包，可以尝试交付
-            return AckState.BASE.ordinal();  // 返回基准确认状态
+            return AckState.BASE;  // 返回基准确认状态
         }
 
         // 情况3：数据包在窗口内但不是基序号
-        return AckState.ORDERED.ordinal();  // 返回有序到达状态
+        return AckState.ORDERED;  // 返回有序到达状态
     }
 }

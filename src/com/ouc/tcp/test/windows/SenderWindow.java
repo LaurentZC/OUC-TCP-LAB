@@ -1,8 +1,8 @@
 package com.ouc.tcp.test.windows;
 
-import com.ouc.tcp.client.Client;
-import com.ouc.tcp.client.UDT_RetransTask;
+import com.ouc.tcp.client.UDT_Timer;
 import com.ouc.tcp.message.TCP_PACKET;
+import com.ouc.tcp.test.GBN_RetransTask;
 import com.ouc.tcp.test.TCP_Sender;
 import com.ouc.tcp.test.elements.SenderElement;
 import com.ouc.tcp.test.elements.SenderElementFlag;
@@ -14,16 +14,27 @@ import com.ouc.tcp.test.elements.SenderElementFlag;
 public class SenderWindow extends SlidingWindow<SenderElement> {
     private int nextToSend;  // 下一个待发送的包序号（窗口内的相对位置）
     private int rear;        // 窗口尾序号，表示最后一个已添加到窗口的数据包序号 + 1
+    private final TCP_Sender sender;
+    private UDT_Timer timer; // 定时器，用于管理重传任务
+    private final int delay;       // 重传延迟时间
+    private final int period;      // 重传周期
 
     /**
      * 构造函数
      *
-     * @param size 窗口大小
+     * @param sender 发送方实例
+     * @param size   窗口大小
+     * @param delay  重传延迟时间
+     * @param period 重传周期
      */
-    public SenderWindow(int size) {
+    public SenderWindow(TCP_Sender sender, int size, int delay, int period) {
         super(size);
         this.nextToSend = 0;  // 初始时，下一个待发送的包序号为 0
         this.rear = 0;        // 初始时，窗口尾序号为 0
+        this.sender = sender;
+        this.timer = new UDT_Timer();
+        this.delay = delay;
+        this.period = period;
     }
 
     @Override
@@ -78,13 +89,8 @@ public class SenderWindow extends SlidingWindow<SenderElement> {
 
     /**
      * 发送下一个待发送的TCP数据包
-     *
-     * @param sender TCP发送器
-     * @param client 客户端
-     * @param delay  重传延迟时间
-     * @param period 重传周期
      */
-    public void sendTcpPacket(TCP_Sender sender, Client client, int delay, int period) {
+    public void sendTcpPacket() {
         // 如果窗口为空或所有包都已发送，则直接返回
         if (isEmpty() || isAllSent()) {
             return;
@@ -94,14 +100,26 @@ public class SenderWindow extends SlidingWindow<SenderElement> {
         int idx = getIdx(nextToSend);
         TCP_PACKET packet = window[idx].getTcpPacket();
 
-        // 设置定时重传任务
-        window[idx].scheduleTask(new UDT_RetransTask(client, packet), delay, period);
+        // 如果发送的是窗口中的第一个包，启动定时器
+        if (nextToSend == base) {
+            timer.schedule(new GBN_RetransTask(this), delay, period);
+        }
 
         // 更新下一个待发送序号
         nextToSend++;
 
         // 发送数据包
         sender.udt_send(packet);
+    }
+
+    /**
+     * 发送窗口内所有未发送的 TCP 数据包
+     */
+    public void sendAllPacket() {
+        nextToSend = base;
+        while (nextToSend < rear) {
+            sendTcpPacket();
+        }
     }
 
     /**
@@ -114,17 +132,22 @@ public class SenderWindow extends SlidingWindow<SenderElement> {
         for (int i = base; i < rear; i++) {
             int idx = getIdx(i);
             // 找到序列号匹配且未确认的数据包
-            if (window[idx].getTcpPacket().getTcpH().getTh_seq() == seq && !window[idx].isAcked()) {
-                window[idx].ackPacket();  // 标记为已确认
-                break;  // 找到后跳出循环
+            if (window[idx].getTcpPacket().getTcpH().getTh_seq() > seq || window[idx].isAcked()) {
+                continue;
             }
+            window[idx].ackPacket();  // 标记为已确认
+            window[idx].reset();
+            base++; // 滑动窗口
+            resetTimer();
         }
+    }
 
-        // 滑动窗口：从基序号开始，连续确认的数据包可以移除
-        while (base != rear && window[getIdx(base)].isAcked()) {
-            int idx = getIdx(base);
-            window[idx].reset();  // 重置窗口元素
-            base++;  // 基序号前移，实现窗口滑动
-        }
+    /**
+     * 重置定时器, 以便在窗口内有未确认的数据包时继续定时重传
+     */
+    private void resetTimer() {
+        timer.cancel();
+        timer = new UDT_Timer();
+        timer.schedule(new GBN_RetransTask(this), delay, period);
     }
 }

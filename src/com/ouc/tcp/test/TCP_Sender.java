@@ -10,10 +10,12 @@ import com.ouc.tcp.message.TCP_PACKET;
 import com.ouc.tcp.test.windows.SenderWindow;
 
 public class TCP_Sender extends TCP_Sender_ADT {
+    // 待发送的 TCP 数据报
+    TCP_PACKET tcpPack;
     // 滑动窗口刚开始不满
     private volatile int flag = 1;
     // 发送者窗口
-    private final SenderWindow window = new SenderWindow(16);
+    private final SenderWindow window;
 
     /* 构造函数 */
     public TCP_Sender() {
@@ -21,14 +23,12 @@ public class TCP_Sender extends TCP_Sender_ADT {
         super();
         // 初始化 TCP 发送端
         super.initTCP_Sender(this);
+        this.window = new SenderWindow(this, 16, 3000, 3000);
     }
 
     @Override
     // 可靠发送（应用层调用）：封装应用层数据，产生 TCP 数据报；需要修改
     public void rdt_send(int dataIndex, int[] appData) {
-        // 待发送的 TCP 数据报
-        TCP_PACKET tcpPack;
-
         // 生成 TCP 数据报（设置序号和数据字段/校验和),注意打包的顺序
         // 包序号设置为字节流号：
         tcpH.setTh_seq(dataIndex * appData.length + 1);
@@ -38,8 +38,8 @@ public class TCP_Sender extends TCP_Sender_ADT {
         tcpH.setTh_sum(CheckSum.computeChkSum(tcpPack));
         tcpPack.setTcpH(tcpH);
 
+        // 如果窗口满，等待窗口有空间
         if (window.isFull()) {
-            // 如果窗口满，等待窗口有空间
             flag = 0;
         }
 
@@ -52,7 +52,7 @@ public class TCP_Sender extends TCP_Sender_ADT {
         } catch (CloneNotSupportedException e) {
             e.printStackTrace();
         }
-        window.sendTcpPacket(this, client, 1000, 1000);
+        window.sendTcpPacket();
     }
 
     @Override
