@@ -7,6 +7,8 @@ package com.ouc.tcp.test;
 
 import com.ouc.tcp.client.TCP_Receiver_ADT;
 import com.ouc.tcp.message.TCP_PACKET;
+import com.ouc.tcp.test.windows.AckState;
+import com.ouc.tcp.test.windows.ReceiverWindow;
 
 import java.io.BufferedWriter;
 import java.io.File;
@@ -14,8 +16,8 @@ import java.io.FileWriter;
 import java.io.IOException;
 
 public class TCP_Receiver extends TCP_Receiver_ADT {
-    // 用于记录当前待接收的包序号，注意包序号不完全是
-    int sequence = 0;
+    // 接收者窗口
+    private final ReceiverWindow window = new ReceiverWindow(16);
 
     /* 构造函数 */
     public TCP_Receiver() {
@@ -26,36 +28,43 @@ public class TCP_Receiver extends TCP_Receiver_ADT {
     }
 
     @Override
-    // 接收到数据报：检查校验和，设置回复的 ACK 报文段
+// 接收到数据报：检查校验和，设置回复的 ACK 报文段
     public void rdt_recv(TCP_PACKET recvPack) {
-        // 回复的 ACK 报文段
+        // 回复的 ACK 报文段（在需要时构造并发送）
         TCP_PACKET ackPack;
 
-        int dataLen = recvPack.getTcpS().getData().length;
-        int dataSeq = (recvPack.getTcpH().getTh_seq() - 1) / dataLen;
-        // 检查校验码，生成 ACK
-        // 如果接受到的数据包序号小于等于期待的序号，且校验和正确：可能是重传包，接收
-        if (CheckSum.computeChkSum(recvPack) == recvPack.getTcpH().getTh_sum() && dataSeq <= sequence) {
-            // 生成 ACK 报文段（设置确认号）
+        // 校验和检查：若校验失败则丢弃该报文段
+        if (CheckSum.computeChkSum(recvPack) != recvPack.getTcpH().getTh_sum()) {
+            return;
+        }
+
+        // 将接收到的包放入接收窗口缓冲，获得缓冲处理结果
+        int bufferResult = window.bufferPacker(recvPack);
+        System.out.println("Buffering result: " + bufferResult);
+
+        // 若包是有序到达、重复包或是基序号的包，均需回复 ACK
+        if (bufferResult == AckState.ORDERED.ordinal() ||
+                bufferResult == AckState.DUPLICATE.ordinal() ||
+                bufferResult == AckState.BASE.ordinal()) {
+            // 将 ACK 字段设为收到包的序号，构造并发送 ACK 报文
             tcpH.setTh_ack(recvPack.getTcpH().getTh_seq());
-            // 创建并发送 ACK 包
             ackPack = new TCP_PACKET(tcpH, tcpS, recvPack.getSourceAddr());
             tcpH.setTh_sum(CheckSum.computeChkSum(ackPack));
             reply(ackPack);
+        }
 
-            // 将接收到的正确有序的数据插入 data 队列，准备交付
-            if (dataSeq == sequence) {
-                sequence = dataSeq + 1;
-                dataQueue.add(recvPack.getTcpS().getData());
-                // sequence++;
+        // 如果接收到了基序号的包，将窗口中可交付的数据包的数据放入交付队列
+        if (bufferResult == AckState.BASE.ordinal()) {
+            TCP_PACKET packet = window.getPacketToDeliver();
+            while (packet != null) {
+                dataQueue.add(packet.getTcpS().getData());
+                packet = window.getPacketToDeliver();
             }
         }
 
         System.out.println();
-
-        // 交付数据（每 20 组数据交付一次）
-        if (dataQueue.size() == 20)
-            deliver_data();
+        // 交付数据
+        deliver_data();
     }
 
     @Override
@@ -78,7 +87,6 @@ public class TCP_Receiver extends TCP_Receiver_ADT {
                 writer.flush();
             }
         } catch (IOException e) {
-            // TODO Auto-generated catch block
             e.printStackTrace();
         }
     }
