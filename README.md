@@ -1,10 +1,11 @@
-# Go-Back-N
+# TCP-Tahoe
 
-Go-Back-N 和 Select Response 相比，Sender 只在窗口左沿放置一个全局的计时器，而不是每个数据包都有一个计时器。
-当计时器超时时，重传窗口中的所有数据包。
-而 Receiver 也维护一个计时器，当计时器超时时，发回当前最后一个连续收到的包的 ACK，即累积确认。
+TCP Tahoe 用 3 个方法来拥塞控制，分别是慢开始、拥塞避免和快重传。
 
-在实现上，做出如下修改：
+1. 慢开始：由 cwnd 和 ssthresh 两个变量控制。
+    - cwnd 表示当前窗口大小
+    - ssthresh 表示慢开始阈值
+    - 在慢开始阶段，cwnd 每收到一个 ACK 就加 1，直到 cwnd 达到 ssthresh，然后进入拥塞避免阶段
 
-- 移除每个数据包的计时器，并在 SenderWindow 类中添加一个计时器
-- 添加 GBN_RetransTask 以增加对重发窗口全部包的支持。
+2. 拥塞避免：cwnd 按照 1/cwnd 的比例增加（每一个 RTT 加 1），进入加法增大阶段
+3. 快重传：当连续收到 3 个相同的 ACK 时，ssthresh 减半，cwnd 重置为 1，立即重传丢失的包。

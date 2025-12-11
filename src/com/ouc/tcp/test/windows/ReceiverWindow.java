@@ -8,7 +8,10 @@ import com.ouc.tcp.test.elements.ReceiverElementFlag;
  * 接收方滑动窗口
  * 管理已接收但未交付、已接收并有序、已交付的TCP数据包
  */
-public class ReceiverWindow extends SlidingWindow<ReceiverElement> {
+public class ReceiverWindow {
+    protected final int size;                 // 窗口大小
+    protected final ReceiverElement[] window; // 窗口数组
+    protected int base;                       // 窗口基序号
 
     /**
      * 构造函数
@@ -16,20 +19,26 @@ public class ReceiverWindow extends SlidingWindow<ReceiverElement> {
      * @param size 接收窗口大小
      */
     public ReceiverWindow(int size) {
-        super(size);
+        this.size = size;
+        this.window = new ReceiverElement[size];
+        this.base = 0;
+
+        // 模板方法：初始化窗口
+        for (int i = 0; i < size; i++) {
+            window[i] = new ReceiverElement();
+        }
     }
 
-    @Override
-    protected ReceiverElement[] createWindowArray(int size) {
-        // 创建接收窗口元素数组
-        return new ReceiverElement[size];
+    /**
+     * 根据序号计算窗口索引
+     *
+     * @param seq 序号
+     * @return 窗口索引
+     */
+    protected int getIdx(int seq) {
+        return seq % size;
     }
 
-    @Override
-    protected ReceiverElement createElement(int index) {
-        // 创建接收窗口元素实例
-        return new ReceiverElement();
-    }
 
     /**
      * 获取下一个可交付的数据包
@@ -76,17 +85,11 @@ public class ReceiverWindow extends SlidingWindow<ReceiverElement> {
             return AckState.DUPLICATE;  // 返回重复到达状态
         }
 
-        // 情况 3&4：数据包序号在窗口范围内
+        // 情况 3：数据包序号在窗口范围内
         // 将数据包缓冲到窗口中的对应位置
         window[getIdx(seq)].setElement(packet, ReceiverElementFlag.BUFFERED.ordinal());
 
-        // 情况4：数据包序号正好等于窗口基序号
-        if (seq == base) {
-            // 这是期望的下一个数据包，可以尝试交付
-            return AckState.BASE;  // 返回基准确认状态
-        }
-
-        // 情况3：数据包在窗口内但不是基序号
-        return AckState.ORDERED;  // 返回有序到达状态
+        // 返回有序到达状态
+        return AckState.ORDERED;
     }
 }

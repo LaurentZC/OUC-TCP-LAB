@@ -23,7 +23,7 @@ public class TCP_Sender extends TCP_Sender_ADT {
         super();
         // 初始化 TCP 发送端
         super.initTCP_Sender(this);
-        this.window = new SenderWindow(this, 16, 3000, 3000);
+        this.window = new SenderWindow(this);
     }
 
     @Override
@@ -39,7 +39,7 @@ public class TCP_Sender extends TCP_Sender_ADT {
         tcpPack.setTcpH(tcpH);
 
         // 如果窗口满，等待窗口有空间
-        if (window.isFull()) {
+        if (window.isCwndFull()) {
             flag = 0;
         }
 
@@ -70,13 +70,11 @@ public class TCP_Sender extends TCP_Sender_ADT {
     public void waitACK() {
         // 循环检查 ackQueue
         // 循环检查确认号对列中是否有新收到的 ACK
-        if (ackQueue.isEmpty()) {
-            return;
+        if (!ackQueue.isEmpty()) {
+            int curAck = ackQueue.poll();
+            window.ackPacket(curAck);
         }
-
-        int currentAck = ackQueue.poll();
-        window.ackTcpPacket(currentAck);
-        if (!window.isFull()) {
+        if (!window.isCwndFull()) {
             flag = 1;
         }
     }

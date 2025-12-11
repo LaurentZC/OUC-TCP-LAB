@@ -45,24 +45,20 @@ public class TCP_Receiver extends TCP_Receiver_ADT {
         System.out.println("Buffering result: 包 " + recvPack.getTcpH().getTh_seq() + " " + bufferResult);
 
         // 如果是窗口左边界的数据包，计时 500ms 等到其他包
-        if (bufferResult == AckState.BASE) {
+        if (bufferResult == AckState.ORDERED || bufferResult == AckState.DUPLICATE) {
             // 处理所有可交付的数据包
             TCP_PACKET packet = window.getPacketToDeliver();
-            int lastAckSeq = -1;
 
             while (packet != null) {
                 // 提取数据并放入交付队列
                 dataQueue.add(packet.getTcpS().getData());
-                // 记录最后一个交付的数据包的序号
-                lastAckSeq = packet.getTcpH().getTh_seq();
+                // 准备 ACK 报文段
+                tcpH.setTh_ack(packet.getTcpH().getTh_seq());
+                ackPack = new TCP_PACKET(tcpH, tcpS, recvPack.getSourceAddr());
+                tcpH.setTh_sum(CheckSum.computeChkSum(ackPack));
                 // 获取下一个可交付的数据包
                 packet = window.getPacketToDeliver();
             }
-
-            // 准备 ACK 报文段
-            tcpH.setTh_ack(lastAckSeq);
-            ackPack = new TCP_PACKET(tcpH, tcpS, recvPack.getSourceAddr());
-            tcpH.setTh_sum(CheckSum.computeChkSum(ackPack));
 
             // 设置延迟 ACK
             if (timer != null) {
@@ -77,10 +73,6 @@ public class TCP_Receiver extends TCP_Receiver_ADT {
                         }, 500
                 );
             }
-        }
-        // 对于无序到达的数据包，立即发送 ACK
-        else if (bufferResult != AckState.ORDERED) {
-            reply(ackPack);
         }
 
         System.out.println();
