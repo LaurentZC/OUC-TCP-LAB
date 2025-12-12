@@ -1,10 +1,6 @@
-# TCP-Tahoe
+# TCP-Reno
 
-TCP Tahoe 用 2 个方法来拥塞控制，分别是慢开始、拥塞避免。
+Reno 版本在 Tahoe 版本上增加了快重传和快恢复
 
-1. 慢开始：由 cwnd 和 ssthresh 两个变量控制。
-    - cwnd 表示当前窗口大小
-    - ssthresh 表示慢开始阈值
-    - 在慢开始阶段，cwnd 每收到一个 ACK 就加 1，直到 cwnd 达到 ssthresh，然后进入拥塞避免阶段
-
-2. 拥塞避免：cwnd 按照 1/cwnd 的比例增加（每一个 RTT 加 1），进入加法增大阶段
+- 快重传：接收方收到三个重复 ACK 时，立刻重发丢失的包
+- 快恢复：快重传之后 cwnd 设置为 ssthresh，实现乘法减小

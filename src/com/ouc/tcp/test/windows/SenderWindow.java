@@ -12,7 +12,6 @@ import java.io.IOException;
 import java.io.PrintWriter;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
-import java.util.Iterator;
 import java.util.concurrent.LinkedBlockingDeque;
 
 /**
@@ -42,12 +41,12 @@ public class SenderWindow {
     private final PrintWriter csvWriter;
     private final DateTimeFormatter timeFormatter = DateTimeFormatter.ofPattern("HH:mm:ss.SSS");
 
-    private void logToCsv() {
+    private void logToCsv(String state) {
         if (csvWriter == null) {
             return;
         }
         String timestamp = LocalTime.now().format(timeFormatter);
-        csvWriter.printf("%s,%d,%d%n", timestamp, cwnd, ssthresh);
+        csvWriter.printf("%s,%d,%d,%s%n", timestamp, cwnd, ssthresh, state);
         csvWriter.flush();
     }
 
@@ -56,8 +55,8 @@ public class SenderWindow {
         this.timer = new UDT_Timer();
         try {
             csvWriter = new PrintWriter(new FileWriter("cwnd_ssthresh.csv", false));
-            csvWriter.println("Time,cwnd,ssthresh");
-            logToCsv();
+            csvWriter.println("Time,cwnd,ssthresh,state");
+            logToCsv("slow start");
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
@@ -72,7 +71,9 @@ public class SenderWindow {
     }
 
     private void resetTimer() {
-        timer.cancel();
+        if (timer != null) {
+            timer.cancel();
+        }
         timer = new UDT_Timer();
         if (!isEmpty()) {
             timer.schedule(new GBN_RetransTask(this), DELAY, PERIOD);
@@ -85,40 +86,75 @@ public class SenderWindow {
             timer.schedule(new GBN_RetransTask(this), DELAY, PERIOD);
         }
         sender.udt_send(packet);
-        window.push(new SenderElement(packet, SenderElementFlag.NOT_ACKED.ordinal()));
+        window.offerLast(new SenderElement(packet, SenderElementFlag.NOT_ACKED.ordinal()));
     }
 
 
     public void ackPacket(int ack) {
-        Iterator<SenderElement> iterator = window.iterator();
-        while (iterator.hasNext()) {
-            SenderElement element = iterator.next();
+        boolean slowStart = false;
+        boolean congestionAvoidance = false;
+        while (!window.isEmpty()) {
+            SenderElement element = window.peekFirst();
             if (element.getTcpPacket().getTcpH().getTh_seq() > ack) {
-                continue;
+                break;
             }
             element.ackPacket();
-            iterator.remove();
+            window.pollFirst();
             if (cwnd < ssthresh) {
+                slowStart = true;
                 cwnd++;
                 cwndPrecise = cwnd;
             }
             resetTimer();
         }
 
+        if (slowStart) {
+            logToCsv("slow start");
+        }
+
         if (cwnd >= ssthresh) {
-            cwndPrecise += 1.0 / cwnd;
+            congestionAvoidance = true;
+            cwndPrecise += 1.0;
             cwnd = (int) cwndPrecise;
         }
 
-        logToCsv();
+        if (congestionAvoidance) {
+            logToCsv("congestion avoidance");
+        }
 
+        handleDupAck(ack);
+    }
+
+    private void handleDupAck(int ack) {
         // 检测重复 ACK
         if (ack == lastAck) {
             dupAckCount++;
             System.out.println("Duplicate ACK " + dupAckCount + " for seq: " + ack);
         } else {
             lastAck = ack;
-            dupAckCount = 1;
+            dupAckCount = 0;
+        }
+
+        // 快重传
+        if (dupAckCount >= DUP_ACK_THRESHOLD) {
+            System.out.println("fast retransmit for seq = " + ack);
+            ssthresh = Math.max(cwnd / 2, 2);
+            cwnd = ssthresh;
+            cwndPrecise = cwnd;
+            fastRetransmit(ack);
+            logToCsv("fast retransmit");
+        }
+    }
+
+    private void fastRetransmit(int ack) {
+        int expectedSeq = ack + 100;
+        for (SenderElement element : window) {
+            int seq = element.getTcpPacket().getTcpH().getTh_seq();
+            if (seq == expectedSeq || (seq > expectedSeq && !element.isAcked())) {
+                sender.udt_send(element.getTcpPacket());
+                System.out.println("Fast retransmit packet with seq: " + seq);
+                break;
+            }
         }
     }
 
@@ -130,13 +166,20 @@ public class SenderWindow {
         cwnd = 1;
         cwndPrecise = cwnd;
 
+        if (timer != null) {
+            timer.cancel();
+        }
+
         for (SenderElement element : window) {
             if (!element.isAcked()) {
                 sender.udt_send(element.getTcpPacket());
             }
         }
 
-        resetTimer();
-        logToCsv();
+        if (!window.isEmpty()) {
+            timer = new UDT_Timer();
+            timer.schedule(new GBN_RetransTask(this), DELAY, PERIOD);
+        }
+        logToCsv("time out");
     }
 }
