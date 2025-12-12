@@ -22,9 +22,12 @@ import java.util.concurrent.LinkedBlockingDeque;
 public class SenderWindow {
     private final LinkedBlockingDeque<SenderElement> window = new LinkedBlockingDeque<>();
 
-    private int cwnd = 1; // 拥塞窗口初始大小为1
-    private double cwndPrecise = 1.0; // 拥塞避免累加器
-    private int ssthresh = 16; // 慢启动阈值初始
+    // 拥塞窗口初始大小为 1
+    private int cwnd = 1;
+    // 拥塞避免累加器
+    private double cwndPrecise = 1.0;
+    // 慢启动阈值初始
+    private int ssthresh = 16;
 
     private final TCP_Sender sender;
     private UDT_Timer timer;
@@ -53,11 +56,11 @@ public class SenderWindow {
         this.timer = new UDT_Timer();
         try {
             csvWriter = new PrintWriter(new FileWriter("cwnd_ssthresh.csv", false));
+            csvWriter.println("Time,cwnd,ssthresh");
+            logToCsv();
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
-        csvWriter.println("Time,cwnd,ssthresh");
-        logToCsv();
     }
 
     public boolean isEmpty() {
@@ -68,7 +71,7 @@ public class SenderWindow {
         return window.size() >= cwnd;
     }
 
-    public void resetTimer() {
+    private void resetTimer() {
         timer.cancel();
         timer = new UDT_Timer();
         if (!isEmpty()) {
@@ -81,62 +84,30 @@ public class SenderWindow {
             timer = new UDT_Timer();
             timer.schedule(new GBN_RetransTask(this), DELAY, PERIOD);
         }
+        sender.udt_send(packet);
         window.push(new SenderElement(packet, SenderElementFlag.NOT_ACKED.ordinal()));
     }
 
-    public void sendAllPacket() {
-        for (SenderElement element : window) {
-            if (!element.isAcked()) {
-                sender.udt_send(element.getTcpPacket());
-            }
-        }
-    }
-
-    public void fastRetransmit(int ack) {
-        int expectedSeq = ack + 100;
-        for (SenderElement element : window) {
-            int seq = element.getTcpPacket().getTcpH().getTh_seq();
-            if (seq > expectedSeq) {
-                continue;
-            }
-            sender.udt_send(element.getTcpPacket());
-            System.out.println("Fast retransmit packet with seq: " + seq);
-        }
-    }
 
     public void ackPacket(int ack) {
-
         Iterator<SenderElement> iterator = window.iterator();
         while (iterator.hasNext()) {
             SenderElement element = iterator.next();
-            int seq = element.getTcpPacket().getTcpH().getTh_seq();
-
-            // 跳过大于 ack 的序列号
-            if (seq > ack) {
+            if (element.getTcpPacket().getTcpH().getTh_seq() > ack) {
                 continue;
             }
-
-            // 确认号小于等于 seq，表示该包已被确认
             element.ackPacket();
-            // 移除当前元素
             iterator.remove();
-
-            // 慢开始
             if (cwnd < ssthresh) {
                 cwnd++;
                 cwndPrecise = cwnd;
             }
-
-            // 重置定时器
             resetTimer();
         }
 
-        logToCsv();
-
-        // 拥塞避免
         if (cwnd >= ssthresh) {
             cwndPrecise += 1.0 / cwnd;
-            cwnd = (int) Math.floor(cwndPrecise);
+            cwnd = (int) cwndPrecise;
         }
 
         logToCsv();
@@ -144,29 +115,28 @@ public class SenderWindow {
         // 检测重复 ACK
         if (ack == lastAck) {
             dupAckCount++;
+            System.out.println("Duplicate ACK " + dupAckCount + " for seq: " + ack);
         } else {
             lastAck = ack;
             dupAckCount = 1;
         }
-
-        // 快重传
-        if (dupAckCount >= DUP_ACK_THRESHOLD) {
-            ssthresh = Math.max(cwnd / 2, 2);
-            cwnd = 1;
-            cwndPrecise = cwnd;
-            logToCsv();
-            fastRetransmit(ack);
-        }
     }
 
-    public void sendTcpPacket() {
-        SenderElement element = window.poll();
-        if (element == null) {
-            return;
+    public void handleTimeout() {
+        System.out.println("Timeout occurred. Retransmitting all packets.\n");
+
+        // 更新 cwnd 和 ssthresh
+        ssthresh = Math.max(cwnd / 2, 2);
+        cwnd = 1;
+        cwndPrecise = cwnd;
+
+        for (SenderElement element : window) {
+            if (!element.isAcked()) {
+                sender.udt_send(element.getTcpPacket());
+            }
         }
-        if (!element.isAcked()) {
-            sender.udt_send(element.getTcpPacket());
-        }
-        window.push(element);
+
+        resetTimer();
+        logToCsv();
     }
 }

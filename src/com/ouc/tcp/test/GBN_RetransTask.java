@@ -13,6 +13,6 @@ public class GBN_RetransTask extends TimerTask {
 
     @Override
     public void run() {
-        window.sendAllPacket();
+        window.handleTimeout();
     }
 }
