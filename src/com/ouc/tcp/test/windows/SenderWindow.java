@@ -129,7 +129,7 @@ public class SenderWindow extends SlidingWindow<SenderElement> {
      */
     public void ackTcpPacket(int seq) {
         // 遍历窗口内所有已发送但未确认的数据包
-        for (int i = base; i < rear; i++) {
+        for (int i = base; i != rear; i++) {
             int idx = getIdx(i);
             // 找到序列号匹配且未确认的数据包
             if (window[idx].getTcpPacket().getTcpH().getTh_seq() > seq || window[idx].isAcked()) {

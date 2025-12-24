@@ -12,8 +12,6 @@ import com.ouc.tcp.test.windows.SenderWindow;
 public class TCP_Sender extends TCP_Sender_ADT {
     // 待发送的 TCP 数据报
     TCP_PACKET tcpPack;
-    // 滑动窗口刚开始不满
-    private volatile int flag = 1;
     // 发送者窗口
     private final SenderWindow window;
 
@@ -23,6 +21,7 @@ public class TCP_Sender extends TCP_Sender_ADT {
         super();
         // 初始化 TCP 发送端
         super.initTCP_Sender(this);
+        // 实际大小为 15
         this.window = new SenderWindow(this, 16, 3000, 3000);
     }
 
@@ -39,11 +38,7 @@ public class TCP_Sender extends TCP_Sender_ADT {
         tcpPack.setTcpH(tcpH);
 
         // 如果窗口满，等待窗口有空间
-        if (window.isFull()) {
-            flag = 0;
-        }
-
-        while (flag == 0) {
+        while (window.isFull()) {
             Thread.yield();
         }
 
@@ -76,9 +71,6 @@ public class TCP_Sender extends TCP_Sender_ADT {
 
         int currentAck = ackQueue.poll();
         window.ackTcpPacket(currentAck);
-        if (!window.isFull()) {
-            flag = 1;
-        }
     }
 
     @Override
