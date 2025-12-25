@@ -47,7 +47,6 @@ public class TCP_Receiver extends TCP_Receiver_ADT {
             if (dataSeq == sequence) {
                 sequence = dataSeq + 1;
                 dataQueue.add(recvPack.getTcpS().getData());
-                // sequence++;
             }
         }
 
@@ -78,7 +77,6 @@ public class TCP_Receiver extends TCP_Receiver_ADT {
                 writer.flush();
             }
         } catch (IOException e) {
-            // TODO Auto-generated catch block
             e.printStackTrace();
         }
     }

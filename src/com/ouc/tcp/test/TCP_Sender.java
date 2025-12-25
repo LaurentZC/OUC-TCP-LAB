@@ -28,7 +28,6 @@ public class TCP_Sender extends TCP_Sender_ADT {
     @Override
     // 可靠发送（应用层调用）：封装应用层数据，产生 TCP 数据报；需要修改
     public void rdt_send(int dataIndex, int[] appData) {
-
         // 生成 TCP 数据报（设置序号和数据字段/校验和),注意打包的顺序
         // 包序号设置为字节流号：
         tcpH.setTh_seq(dataIndex * appData.length + 1);
@@ -38,16 +37,14 @@ public class TCP_Sender extends TCP_Sender_ADT {
         tcpH.setTh_sum(CheckSum.computeChkSum(tcpPack));
         tcpPack.setTcpH(tcpH);
 
+        // 为该数据报启动计时器
+        timer = new UDT_Timer();
+        // 启动定时器，1s 后第一次执行，以后每隔 1s 执行一次
+        timer.schedule(new UDT_RetransTask(client, tcpPack), 1000, 1000);
+
         // 发送 TCP 数据报
         udt_send(tcpPack);
         flag = 0;
-
-        // 为该数据报启动计时器
-        timer = new UDT_Timer();
-        // 创建重传任务
-        UDT_RetransTask task = new UDT_RetransTask(client, tcpPack);
-        // 启动定时器，1s 后第一次执行，以后每隔 1s 执行一次
-        timer.schedule(task, 1000, 1000);
 
         // 等待 ACK 报文
         // waitACK();
@@ -71,25 +68,21 @@ public class TCP_Sender extends TCP_Sender_ADT {
     public void waitACK() {
         // 循环检查 ackQueue
         // 循环检查确认号对列中是否有新收到的 ACK
-        while (true) {
-            if (ackQueue.isEmpty()) {
-                // 让出 CPU 时间，避免忙等待
-                Thread.yield();
-                continue;
-            }
+        if (ackQueue.isEmpty()) {
+            // 让出 CPU 时间，避免忙等待
+            return;
+        }
 
-            int currentAck = ackQueue.poll();
-            // System.out.println("CurrentAck: " + currentAck);
-            if (currentAck == tcpPack.getTcpH().getTh_seq()) {
-                System.out.println("Clear: " + tcpPack.getTcpH().getTh_seq());
-                // 停止计时器
-                timer.cancel();
-                flag = 1;
-                break;
-            } else {
-                System.out.println("Retransmit: " + tcpPack.getTcpH().getTh_seq());
-                // 如果确认号不匹配，由计时器触发重传
-            }
+        int currentAck = ackQueue.poll();
+        // System.out.println("CurrentAck: " + currentAck);
+        if (currentAck == tcpPack.getTcpH().getTh_seq()) {
+            System.out.println("Clear: " + tcpPack.getTcpH().getTh_seq());
+            // 停止计时器
+            timer.cancel();
+            flag = 1;
+        } else {
+            System.out.println("Retransmit: " + tcpPack.getTcpH().getTh_seq());
+            // 如果确认号不匹配，由计时器触发重传
         }
     }
 
