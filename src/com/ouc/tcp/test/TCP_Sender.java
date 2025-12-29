@@ -10,8 +10,6 @@ import com.ouc.tcp.message.TCP_PACKET;
 import com.ouc.tcp.test.windows.SenderWindow;
 
 public class TCP_Sender extends TCP_Sender_ADT {
-    // 滑动窗口刚开始不满
-    private volatile int flag = 1;
     // 发送者窗口
     private final SenderWindow window = new SenderWindow(16);
 
@@ -28,7 +26,6 @@ public class TCP_Sender extends TCP_Sender_ADT {
     public void rdt_send(int dataIndex, int[] appData) {
         // 待发送的 TCP 数据报
         TCP_PACKET tcpPack;
-
         // 生成 TCP 数据报（设置序号和数据字段/校验和),注意打包的顺序
         // 包序号设置为字节流号：
         tcpH.setTh_seq(dataIndex * appData.length + 1);
@@ -37,16 +34,9 @@ public class TCP_Sender extends TCP_Sender_ADT {
         // 更新带有 checksum 的 TCP 报文头
         tcpH.setTh_sum(CheckSum.computeChkSum(tcpPack));
         tcpPack.setTcpH(tcpH);
-
-        if (window.isFull()) {
-            // 如果窗口满，等待窗口有空间
-            flag = 0;
+        while (window.isFull()) {
+            Thread.onSpinWait();
         }
-
-        while (flag == 0) {
-            Thread.yield();
-        }
-
         try {
             window.pushTcpPacket(tcpPack.clone());
         } catch (CloneNotSupportedException e) {
@@ -73,12 +63,8 @@ public class TCP_Sender extends TCP_Sender_ADT {
         if (ackQueue.isEmpty()) {
             return;
         }
-
         int currentAck = ackQueue.poll();
         window.ackTcpPacket(currentAck);
-        if (!window.isFull()) {
-            flag = 1;
-        }
     }
 
     @Override

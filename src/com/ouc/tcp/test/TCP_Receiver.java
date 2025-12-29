@@ -28,30 +28,23 @@ public class TCP_Receiver extends TCP_Receiver_ADT {
     }
 
     @Override
-// 接收到数据报：检查校验和，设置回复的 ACK 报文段
+    // 接收到数据报：检查校验和，设置回复的 ACK 报文段
     public void rdt_recv(TCP_PACKET recvPack) {
         // 回复的 ACK 报文段（在需要时构造并发送）
         TCP_PACKET ackPack;
-
         // 校验和检查：若校验失败则丢弃该报文段
         if (CheckSum.computeChkSum(recvPack) != recvPack.getTcpH().getTh_sum()) {
             return;
         }
-
         // 将接收到的包放入接收窗口缓冲，获得缓冲处理结果
         int bufferResult = window.bufferPacker(recvPack);
         System.out.println("Buffering result: " + bufferResult);
 
-        // 若包是有序到达、重复包或是基序号的包，均需回复 ACK
-        if (bufferResult == AckState.ORDERED.ordinal() ||
-                bufferResult == AckState.DUPLICATE.ordinal() ||
-                bufferResult == AckState.BASE.ordinal()) {
-            // 将 ACK 字段设为收到包的序号，构造并发送 ACK 报文
-            tcpH.setTh_ack(recvPack.getTcpH().getTh_seq());
-            ackPack = new TCP_PACKET(tcpH, tcpS, recvPack.getSourceAddr());
-            tcpH.setTh_sum(CheckSum.computeChkSum(ackPack));
-            reply(ackPack);
-        }
+        // 将 ACK 字段设为收到包的序号，构造并发送 ACK 报文
+        tcpH.setTh_ack(recvPack.getTcpH().getTh_seq());
+        ackPack = new TCP_PACKET(tcpH, tcpS, recvPack.getSourceAddr());
+        tcpH.setTh_sum(CheckSum.computeChkSum(ackPack));
+        reply(ackPack);
 
         // 如果接收到了基序号的包，将窗口中可交付的数据包的数据放入交付队列
         if (bufferResult == AckState.BASE.ordinal()) {
@@ -72,13 +65,10 @@ public class TCP_Receiver extends TCP_Receiver_ADT {
     public void deliver_data() {
         // 检查 dataQueue，将数据写入文件
         File fw = new File("recvData.txt");
-
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(fw, true))) {
-
             // 循环检查 data 队列中是否有新交付数据
             while (!dataQueue.isEmpty()) {
                 int[] data = dataQueue.poll();
-
                 // 将数据写入文件
                 for (int datum : data) {
                     writer.write(datum + "\n");
@@ -106,9 +96,7 @@ public class TCP_Receiver extends TCP_Receiver_ADT {
          * 7. 出错/丢包/延迟
          */
         tcpH.setTh_eflag((byte) 7);
-
         // 发送数据报
         client.send(replyPack);
     }
-
 }
