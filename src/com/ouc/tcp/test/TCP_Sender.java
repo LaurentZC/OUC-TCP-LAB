@@ -24,7 +24,6 @@ public class TCP_Sender extends TCP_Sender_ADT {
     @Override
     // 可靠发送（应用层调用）：封装应用层数据，产生 TCP 数据报；需要修改
     public void rdt_send(int dataIndex, int[] appData) {
-
         // 生成 TCP 数据报（设置序号和数据字段/校验和),注意打包的顺序
         // 包序号设置为字节流号：
         tcpH.setTh_seq(dataIndex * appData.length + 1);
@@ -82,7 +81,6 @@ public class TCP_Sender extends TCP_Sender_ADT {
         System.out.println("Receive ACK Number： " + recvPack.getTcpH().getTh_ack());
         ackQueue.add(recvPack.getTcpH().getTh_ack());
         System.out.println();
-
         // 处理 ACK 报文
         waitACK();
     }
