@@ -48,7 +48,6 @@ public class TCP_Receiver extends TCP_Receiver_ADT {
         if (bufferResult == AckState.BASE) {
             // 处理所有可交付的数据包
             TCP_PACKET packet = window.getPacketToDeliver();
-
             while (packet != null) {
                 // 提取数据并放入交付队列
                 dataQueue.add(packet.getTcpS().getData());
@@ -61,24 +60,21 @@ public class TCP_Receiver extends TCP_Receiver_ADT {
             }
 
             // 设置延迟 ACK
-            if (timer != null) {
-                timer.cancel();
-                timer = new UDT_Timer();
-                timer.schedule(
-                        new TimerTask() {
-                            @Override
-                            public void run() {
-                                reply(ackPack);
-                            }
-                        }, 500
-                );
-            }
+            timer.cancel();
+            timer = new UDT_Timer();
+            timer.schedule(
+                    new TimerTask() {
+                        @Override
+                        public void run() {
+                            reply(ackPack);
+                        }
+                    }, 500
+            );
         }
         // 对于无序到达的数据包，立即发送 ACK
         else if (bufferResult != AckState.ORDERED) {
             reply(ackPack);
         }
-
         System.out.println();
         // 交付数据
         deliver_data();
@@ -89,13 +85,10 @@ public class TCP_Receiver extends TCP_Receiver_ADT {
     public void deliver_data() {
         // 检查 dataQueue，将数据写入文件
         File fw = new File("recvData.txt");
-
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(fw, true))) {
-
             // 循环检查 data 队列中是否有新交付数据
             while (!dataQueue.isEmpty()) {
                 int[] data = dataQueue.poll();
-
                 // 将数据写入文件
                 for (int datum : data) {
                     writer.write(datum + "\n");
@@ -123,9 +116,7 @@ public class TCP_Receiver extends TCP_Receiver_ADT {
          * 7. 出错/丢包/延迟
          */
         tcpH.setTh_eflag((byte) 7);
-
         // 发送数据报
         client.send(replyPack);
     }
-
 }

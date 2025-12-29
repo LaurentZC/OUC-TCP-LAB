@@ -95,19 +95,15 @@ public class SenderWindow extends SlidingWindow<SenderElement> {
         if (isEmpty() || isAllSent()) {
             return;
         }
-
         // 获取下一个待发送包在窗口中的索引
         int idx = getIdx(nextToSend);
         TCP_PACKET packet = window[idx].getTcpPacket();
-
         // 如果发送的是窗口中的第一个包，启动定时器
         if (nextToSend == base) {
             timer.schedule(new GBN_RetransTask(this), delay, period);
         }
-
         // 更新下一个待发送序号
         nextToSend++;
-
         // 发送数据包
         sender.udt_send(packet);
     }

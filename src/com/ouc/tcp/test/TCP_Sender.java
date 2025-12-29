@@ -39,7 +39,7 @@ public class TCP_Sender extends TCP_Sender_ADT {
 
         // 如果窗口满，等待窗口有空间
         while (window.isFull()) {
-            Thread.yield();
+            Thread.onSpinWait();
         }
 
         try {
@@ -68,7 +68,6 @@ public class TCP_Sender extends TCP_Sender_ADT {
         if (ackQueue.isEmpty()) {
             return;
         }
-
         int currentAck = ackQueue.poll();
         window.ackTcpPacket(currentAck);
     }
@@ -79,7 +78,6 @@ public class TCP_Sender extends TCP_Sender_ADT {
         System.out.println("Receive ACK Number： " + recvPack.getTcpH().getTh_ack());
         ackQueue.add(recvPack.getTcpH().getTh_ack());
         System.out.println();
-
         // 处理 ACK 报文
         waitACK();
     }
