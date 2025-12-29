@@ -37,7 +37,7 @@ public class TCP_Receiver extends TCP_Receiver_ADT {
             return;
         }
         // 将接收到的包放入接收窗口缓冲，获得缓冲处理结果
-        int bufferResult = window.bufferPacker(recvPack);
+        AckState bufferResult = window.bufferPacker(recvPack);
         System.out.println("Buffering result: " + bufferResult);
 
         // 将 ACK 字段设为收到包的序号，构造并发送 ACK 报文
@@ -47,14 +47,13 @@ public class TCP_Receiver extends TCP_Receiver_ADT {
         reply(ackPack);
 
         // 如果接收到了基序号的包，将窗口中可交付的数据包的数据放入交付队列
-        if (bufferResult == AckState.BASE.ordinal()) {
+        if (bufferResult == AckState.BASE) {
             TCP_PACKET packet = window.getPacketToDeliver();
             while (packet != null) {
                 dataQueue.add(packet.getTcpS().getData());
                 packet = window.getPacketToDeliver();
             }
         }
-
         System.out.println();
         // 交付数据
         deliver_data();

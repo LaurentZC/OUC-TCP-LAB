@@ -73,7 +73,6 @@ public class TCP_Sender extends TCP_Sender_ADT {
         System.out.println("Receive ACK Number： " + recvPack.getTcpH().getTh_ack());
         ackQueue.add(recvPack.getTcpH().getTh_ack());
         System.out.println();
-
         // 处理 ACK 报文
         waitACK();
     }

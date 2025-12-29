@@ -69,10 +69,8 @@ public class SenderWindow extends SlidingWindow<SenderElement> {
      * @param packet 待发送的TCP数据包
      */
     public void pushTcpPacket(TCP_PACKET packet) {
-        // 获取窗口尾位置对应的数组索引
-        int idx = getIdx(rear);
         // 设置窗口元素：存储数据包，标记为未确认
-        window[idx].setElement(packet, SenderElementFlag.NOT_ACKED.ordinal());
+        window[getIdx(rear)].setElement(packet, SenderElementFlag.NOT_ACKED.ordinal());
         rear++;  // 窗口尾序号后移
     }
 
@@ -89,17 +87,13 @@ public class SenderWindow extends SlidingWindow<SenderElement> {
         if (isEmpty() || isAllSent()) {
             return;
         }
-
         // 获取下一个待发送包在窗口中的索引
         int idx = getIdx(nextToSend);
         TCP_PACKET packet = window[idx].getTcpPacket();
-
         // 设置定时重传任务
         window[idx].scheduleTask(new UDT_RetransTask(client, packet), delay, period);
-
         // 更新下一个待发送序号
         nextToSend++;
-
         // 发送数据包
         sender.udt_send(packet);
     }

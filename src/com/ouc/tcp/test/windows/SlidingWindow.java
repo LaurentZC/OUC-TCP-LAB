@@ -40,22 +40,4 @@ public abstract class SlidingWindow<T extends WindowElement> {
     protected int getIdx(int seq) {
         return seq % size;
     }
-
-    /**
-     * 获取窗口大小
-     *
-     * @return 窗口大小
-     */
-    public int getSize() {
-        return size;
-    }
-
-    /**
-     * 获取窗口基序号
-     *
-     * @return 基序号
-     */
-    public int getBase() {
-        return base;
-    }
 }
