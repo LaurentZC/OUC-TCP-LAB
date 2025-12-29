@@ -12,14 +12,14 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.util.Iterator;
-import java.util.concurrent.LinkedBlockingDeque;
+import java.util.LinkedList;
 
 /**
  * 发送方滑动窗口
  * 管理待发送、已发送但未确认、已确认的TCP数据包
  */
 public class SenderWindow {
-    private final LinkedBlockingDeque<SenderElement> window = new LinkedBlockingDeque<>();
+    private final LinkedList<SenderElement> window = new LinkedList<>();
 
     private final TcpRenoCongestionControl congestion;
     private final TCP_Sender sender;
@@ -52,16 +52,18 @@ public class SenderWindow {
     }
 
     private void resetTimer() {
-        if (timer != null) {
-            timer.cancel();
-        }
-        timer = new UDT_Timer();
+        timer.cancel();
         if (!isEmpty()) {
+            timer = new UDT_Timer();
             timer.schedule(new GBN_RetransTask(this), DELAY, PERIOD);
         }
     }
 
     public void pushTcpPacket(TCP_PACKET packet) {
+        while (isCwndFull()) {
+            Thread.onSpinWait();
+        }
+
         if (isEmpty()) {
             timer = new UDT_Timer();
             timer.schedule(new GBN_RetransTask(this), DELAY, PERIOD);
@@ -136,12 +138,10 @@ public class SenderWindow {
         for (SenderElement element : window) {
             if (!element.isAcked()) {
                 sender.udt_send(element.getTcpPacket());
+                timer = new UDT_Timer();
+                timer.schedule(new GBN_RetransTask(this), DELAY, PERIOD);
+                break;
             }
-        }
-
-        if (!window.isEmpty()) {
-            timer = new UDT_Timer();
-            timer.schedule(new GBN_RetransTask(this), DELAY, PERIOD);
         }
     }
 }

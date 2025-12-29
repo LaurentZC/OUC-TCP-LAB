@@ -18,18 +18,21 @@ public class TcpRenoCongestionControl {
     private final PrintWriter csvWriter;
     private final DateTimeFormatter timeFormatter = DateTimeFormatter.ofPattern("HH:mm:ss.SSS");
 
-    private void logToCsv() {
+    private void logToCsv(String message) {
         if (csvWriter == null) {
             return;
         }
+        if (message == null) {
+            message = state.toString();
+        }
         String timestamp = LocalTime.now().format(timeFormatter);
-        csvWriter.printf("%s,%d,%d,%s%n", timestamp, cwnd, ssthresh, state);
+        csvWriter.printf("%s,%d,%d,%s%n", timestamp, cwnd, ssthresh, message);
         csvWriter.flush();
     }
 
     public TcpRenoCongestionControl(PrintWriter csvWriter) {
         this.csvWriter = csvWriter;
-        logToCsv();
+        logToCsv(null);
     }
 
     public void onAck(int acked) {
@@ -39,10 +42,8 @@ public class TcpRenoCongestionControl {
                 return;
             }
         }
-
-        if (state == TcpRenoState.CONGESTION_AVOIDANCE && acked > 0) {
-            congestionAvoidance(acked);
-        }
+        state = TcpRenoState.CONGESTION_AVOIDANCE;
+        congestionAvoidance(acked);
     }
 
     private int slowStart(int acked) {
@@ -51,23 +52,14 @@ public class TcpRenoCongestionControl {
 
         cwnd = Math.min(newCwnd, cwnd * 2);
         cwndPrecise = cwnd;
-        acked -= usedAcked;
-
-        // 如果达到 ssthresh，进入拥塞避免阶段
-        if (cwnd >= ssthresh) {
-            state = TcpRenoState.CONGESTION_AVOIDANCE;
-            cwnd = ssthresh;
-            cwndPrecise = cwnd;
-        }
-
-        logToCsv();
-        return acked;
+        logToCsv(null);
+        return acked - usedAcked;
     }
 
     private void congestionAvoidance(int acked) {
         cwndPrecise += (double) acked / cwnd;
         cwnd = (int) cwndPrecise;
-        logToCsv();
+        logToCsv(null);
     }
 
     public void onTimeout() {
@@ -75,7 +67,7 @@ public class TcpRenoCongestionControl {
         cwnd = 1;
         cwndPrecise = 1.0;
         state = TcpRenoState.SLOW_START;
-        logToCsv();
+        logToCsv(null);
     }
 
     public void onFastRetransmit() {
@@ -83,11 +75,9 @@ public class TcpRenoCongestionControl {
         ssthresh = Math.max(cwnd / 2, 2);
         cwnd = ssthresh;
         cwndPrecise = cwnd;
-        // 为了打个日志
-        state = TcpRenoState.FAST_RETRANSMIT;
-        logToCsv();
         // 快重传后进入拥塞避免
         state = TcpRenoState.CONGESTION_AVOIDANCE;
+        logToCsv("fast retransmit");
     }
 
     public int getCwnd() {
