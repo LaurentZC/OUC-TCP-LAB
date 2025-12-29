@@ -30,7 +30,6 @@ public class TCP_Receiver extends TCP_Receiver_ADT {
     public void rdt_recv(TCP_PACKET recvPack) {
         // 回复的 ACK 报文段
         TCP_PACKET ackPack;
-
         int dataLen = recvPack.getTcpS().getData().length;
         int dataSeq = (recvPack.getTcpH().getTh_seq() - 1) / dataLen;
         // 检查校验码，生成 ACK
@@ -49,9 +48,7 @@ public class TCP_Receiver extends TCP_Receiver_ADT {
                 dataQueue.add(recvPack.getTcpS().getData());
             }
         }
-
         System.out.println();
-
         // 交付数据（每 20 组数据交付一次）
         if (dataQueue.size() == 20)
             deliver_data();
@@ -62,9 +59,7 @@ public class TCP_Receiver extends TCP_Receiver_ADT {
     public void deliver_data() {
         // 检查 dataQueue，将数据写入文件
         File fw = new File("recvData.txt");
-
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(fw, true))) {
-
             // 循环检查 data 队列中是否有新交付数据
             while (!dataQueue.isEmpty()) {
                 int[] data = dataQueue.poll();
@@ -96,7 +91,6 @@ public class TCP_Receiver extends TCP_Receiver_ADT {
          * 7. 出错/丢包/延迟
          */
         tcpH.setTh_eflag((byte) 7);
-
         // 发送数据报
         client.send(replyPack);
     }

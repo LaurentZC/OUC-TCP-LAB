@@ -37,14 +37,14 @@ public class TCP_Sender extends TCP_Sender_ADT {
         tcpH.setTh_sum(CheckSum.computeChkSum(tcpPack));
         tcpPack.setTcpH(tcpH);
 
+        // 发送 TCP 数据报
+        udt_send(tcpPack);
+        flag = 0;
+
         // 为该数据报启动计时器
         timer = new UDT_Timer();
         // 启动定时器，1s 后第一次执行，以后每隔 1s 执行一次
         timer.schedule(new UDT_RetransTask(client, tcpPack), 1000, 1000);
-
-        // 发送 TCP 数据报
-        udt_send(tcpPack);
-        flag = 0;
 
         // 等待 ACK 报文
         // waitACK();
@@ -69,7 +69,6 @@ public class TCP_Sender extends TCP_Sender_ADT {
         // 循环检查 ackQueue
         // 循环检查确认号对列中是否有新收到的 ACK
         if (ackQueue.isEmpty()) {
-            // 让出 CPU 时间，避免忙等待
             return;
         }
 
@@ -92,7 +91,6 @@ public class TCP_Sender extends TCP_Sender_ADT {
         System.out.println("Receive ACK Number： " + recvPack.getTcpH().getTh_ack());
         ackQueue.add(recvPack.getTcpH().getTh_ack());
         System.out.println();
-
         // 处理 ACK 报文
         waitACK();
     }
