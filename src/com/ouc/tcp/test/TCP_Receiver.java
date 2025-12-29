@@ -41,10 +41,12 @@ public class TCP_Receiver extends TCP_Receiver_ADT {
         System.out.println("Buffering result: " + bufferResult);
 
         // 将 ACK 字段设为收到包的序号，构造并发送 ACK 报文
-        tcpH.setTh_ack(recvPack.getTcpH().getTh_seq());
-        ackPack = new TCP_PACKET(tcpH, tcpS, recvPack.getSourceAddr());
-        tcpH.setTh_sum(CheckSum.computeChkSum(ackPack));
-        reply(ackPack);
+        if (bufferResult != AckState.OUTOFWINDOW) {
+            tcpH.setTh_ack(recvPack.getTcpH().getTh_seq());
+            ackPack = new TCP_PACKET(tcpH, tcpS, recvPack.getSourceAddr());
+            tcpH.setTh_sum(CheckSum.computeChkSum(ackPack));
+            reply(ackPack);
+        }
 
         // 如果接收到了基序号的包，将窗口中可交付的数据包的数据放入交付队列
         if (bufferResult == AckState.BASE) {

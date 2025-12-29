@@ -64,7 +64,7 @@ public class ReceiverWindow extends SlidingWindow<ReceiverElement> {
         // 情况 1：数据包序号超出接收窗口范围
         if (seq >= base + size) {
             // 数据包超出窗口右边界，可能是未来数据包
-            return AckState.DISORDERED;  // 返回无序到达状态
+            return AckState.OUTOFWINDOW;  // 返回无序到达状态
         }
         // 情况2：数据包序号小于窗口基序号
         if (seq < base) {
