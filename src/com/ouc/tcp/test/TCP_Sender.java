@@ -39,7 +39,6 @@ public class TCP_Sender extends TCP_Sender_ADT {
         flag = 0;
 
         // 等待 ACK 报文
-        // waitACK();
         while (flag == 0) {
             Thread.onSpinWait();
         }

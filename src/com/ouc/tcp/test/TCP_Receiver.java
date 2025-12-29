@@ -30,7 +30,6 @@ public class TCP_Receiver extends TCP_Receiver_ADT {
     public void rdt_recv(TCP_PACKET recvPack) {
         // 回复的 ACK 报文段
         TCP_PACKET ackPack;
-
         // 检查校验码，生成 ACK
         if (CheckSum.computeChkSum(recvPack) == recvPack.getTcpH().getTh_sum()) {
             // 生成 ACK 报文段（设置确认号）
@@ -53,10 +52,7 @@ public class TCP_Receiver extends TCP_Receiver_ADT {
             // 回复 ACK 报文段
             reply(ackPack);
         }
-
         System.out.println();
-
-
         // 交付数据（每 20 组数据交付一次）
         if (dataQueue.size() == 20)
             deliver_data();
@@ -67,9 +63,7 @@ public class TCP_Receiver extends TCP_Receiver_ADT {
     public void deliver_data() {
         // 检查 dataQueue，将数据写入文件
         File fw = new File("recvData.txt");
-
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(fw, true))) {
-
             // 循环检查 data 队列中是否有新交付数据
             while (!dataQueue.isEmpty()) {
                 int[] data = dataQueue.poll();
@@ -82,7 +76,6 @@ public class TCP_Receiver extends TCP_Receiver_ADT {
                 writer.flush();
             }
         } catch (IOException e) {
-            // TODO Auto-generated catch block
             e.printStackTrace();
         }
     }
@@ -93,7 +86,6 @@ public class TCP_Receiver extends TCP_Receiver_ADT {
         // 设置错误控制标志
         // eFlag=0，信道无错误
         tcpH.setTh_eflag((byte) 0);
-
         // 发送数据报
         client.send(replyPack);
     }
