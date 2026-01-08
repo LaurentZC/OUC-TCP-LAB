@@ -10,8 +10,6 @@ import com.ouc.tcp.message.TCP_PACKET;
 import com.ouc.tcp.test.windows.SenderWindow;
 
 public class TCP_Sender extends TCP_Sender_ADT {
-    // 待发送的 TCP 数据报
-    TCP_PACKET tcpPack;
     // 发送者窗口
     private final SenderWindow window;
 
@@ -27,6 +25,8 @@ public class TCP_Sender extends TCP_Sender_ADT {
     @Override
     // 可靠发送（应用层调用）：封装应用层数据，产生 TCP 数据报；需要修改
     public void rdt_send(int dataIndex, int[] appData) {
+        // 待发送的 TCP 数据报
+        TCP_PACKET tcpPack;
         // 生成 TCP 数据报（设置序号和数据字段/校验和),注意打包的顺序
         // 包序号设置为字节流号：
         tcpH.setTh_seq(dataIndex * appData.length + 1);
@@ -36,9 +36,8 @@ public class TCP_Sender extends TCP_Sender_ADT {
         tcpH.setTh_sum(CheckSum.computeChkSum(tcpPack));
         tcpPack.setTcpH(tcpH);
 
-        // 如果窗口满，等待窗口有空间
-        while (window.isCwndFull()) {
-            Thread.yield();
+        while (window.isFull()) {
+            Thread.onSpinWait();
         }
 
         try {
@@ -59,14 +58,9 @@ public class TCP_Sender extends TCP_Sender_ADT {
     }
 
     @Override
-    // 需要修改
+    @Deprecated(since = "整合到了 recv 方法中")
     public void waitACK() {
-        // 循环检查 ackQueue
-        // 循环检查确认号对列中是否有新收到的 ACK
-        if (!ackQueue.isEmpty()) {
-            int curAck = ackQueue.poll();
-            window.ackPacket(curAck);
-        }
+        // 弃用
     }
 
     @Override
@@ -77,6 +71,9 @@ public class TCP_Sender extends TCP_Sender_ADT {
         System.out.println();
 
         // 处理 ACK 报文
-        waitACK();
+        if (!ackQueue.isEmpty()) {
+            int curAck = ackQueue.poll();
+            window.ackPacket(curAck);
+        }
     }
 }

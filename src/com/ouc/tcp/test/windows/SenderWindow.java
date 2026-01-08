@@ -7,25 +7,28 @@ import com.ouc.tcp.test.TCP_Sender;
 import com.ouc.tcp.test.elements.SenderElement;
 import com.ouc.tcp.test.elements.SenderElementFlag;
 import com.ouc.tcp.test.reno.TcpRenoCongestionControl;
+import com.ouc.tcp.test.reno.TcpRenoState;
 
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.util.Iterator;
-import java.util.LinkedList;
+import java.util.concurrent.LinkedBlockingDeque;
 
 /**
  * 发送方滑动窗口
  * 管理待发送、已发送但未确认、已确认的TCP数据包
  */
 public class SenderWindow {
-    private final LinkedList<SenderElement> window = new LinkedList<>();
+    private final LinkedBlockingDeque<SenderElement> window = new LinkedBlockingDeque<>();
+    private final LinkedBlockingDeque<SenderElement> cache = new LinkedBlockingDeque<>();
+    private static final int MAX_CACHE_SIZE = 8;
 
     private final TcpRenoCongestionControl congestion;
     private final TCP_Sender sender;
     private UDT_Timer timer;
-    private static final int DELAY = 3000;
-    private static final int PERIOD = 3000;
+    private static final int DELAY = 2500;
+    private static final int PERIOD = 2500;
 
     private int lastAck = -1;
     private int dupAckCount = 0;
@@ -43,104 +46,120 @@ public class SenderWindow {
         }
     }
 
-    public boolean isEmpty() {
-        return window.isEmpty();
-    }
-
-    public boolean isCwndFull() {
-        return window.size() >= congestion.getCwnd();
+    public boolean isFull() {
+        return cache.size() >= MAX_CACHE_SIZE;
     }
 
     private void resetTimer() {
         timer.cancel();
-        if (!isEmpty()) {
-            timer = new UDT_Timer();
+        timer = new UDT_Timer();
+        if (!window.isEmpty()) {
             timer.schedule(new GBN_RetransTask(this), DELAY, PERIOD);
         }
     }
 
-    public void pushTcpPacket(TCP_PACKET packet) {
-        while (isCwndFull()) {
-            Thread.onSpinWait();
-        }
-
-        if (isEmpty()) {
-            timer = new UDT_Timer();
-            timer.schedule(new GBN_RetransTask(this), DELAY, PERIOD);
-        }
-        sender.udt_send(packet);
-        window.offerLast(new SenderElement(packet, SenderElementFlag.NOT_ACKED.ordinal()));
+    public synchronized void pushTcpPacket(TCP_PACKET packet) {
+        cache.offerLast(new SenderElement(packet, SenderElementFlag.NOT_ACKED.ordinal()));
+        trySendPackets();
     }
-
 
     public void ackPacket(int ack) {
         int acked = 0;
-        Iterator<SenderElement> iterator = window.iterator();
-        while (iterator.hasNext()) {
-            SenderElement element = iterator.next();
-            if (element.getTcpPacket().getTcpH().getTh_seq() > ack) {
+        while (true) {
+            SenderElement element = window.peekFirst();
+            if (element != null && element.getTcpPacket().getTcpH().getTh_seq() <= ack) {
+                element.ackPacket();
+                window.pollFirst();
+                acked++;
+                resetTimer();
+            } else {
                 break;
             }
-            element.ackPacket();
-            iterator.remove();
-            acked++;
-            resetTimer();
+        }
+
+        if (ack == lastAck) {
+            handleDupAck(ack);
+            return;
+        }
+        lastAck = ack;
+        dupAckCount = 1;
+        if (congestion.getRenoState() == TcpRenoState.FAST_RECOVERY) {
+            congestion.endFatRecovery();
         }
 
         // 更新拥塞窗口
         if (acked > 0) {
             congestion.onAck(acked);
-        }
-
-        // 处理重复ACK
-        if (ack == lastAck) {
-            handleDupAck(ack);
-        } else {
-            lastAck = ack;
-            dupAckCount = 1;
+            updateWindow();
+            trySendPackets();
         }
     }
 
     private void handleDupAck(int ack) {
-        // 记录 ACK
+        // 记录 ACK 重复数
         dupAckCount++;
-        System.out.println("Duplicate ACK " + dupAckCount + " for seq: " + ack);
-
         // 快重传
-        if (dupAckCount >= DUP_ACK_THRESHOLD) {
-            System.out.println("fast retransmit for seq = " + ack);
+        if (dupAckCount == DUP_ACK_THRESHOLD) {
             congestion.onFastRetransmit();
             fastRetransmit(ack);
+        } else if (dupAckCount > DUP_ACK_THRESHOLD) {
+            congestion.onFastRecovery();
+            trySendPackets();
         }
     }
 
     private void fastRetransmit(int ack) {
         int expectedSeq = ack + 100;
         for (SenderElement element : window) {
-            int seq = element.getTcpPacket().getTcpH().getTh_seq();
-            if (seq == expectedSeq) {
+            if (element.getTcpPacket().getTcpH().getTh_seq() == expectedSeq) {
                 sender.udt_send(element.getTcpPacket());
-                System.out.println("Fast retransmit packet with seq: " + seq);
+                updateWindow();
                 break;
             }
         }
     }
 
-    public void handleTimeout() {
-        System.out.println("Timeout occurred. Retransmitting all packets.\n");
-
-        congestion.onTimeout();
-
-        if (timer != null) {
-            timer.cancel();
+    private synchronized void updateWindow() {
+        if (window.size() <= congestion.getCwnd()) {
+            return;
         }
+        LinkedBlockingDeque<SenderElement> temp = new LinkedBlockingDeque<>();
+        Iterator<SenderElement> iterator = window.iterator();
+        int count = 0;
+        while (count < congestion.getCwnd() && iterator.hasNext()) {
+            iterator.next();
+            count++;
+        }
+        while (iterator.hasNext()) {
+            temp.offerFirst(iterator.next());
+            iterator.remove();
+        }
+        while (!temp.isEmpty()) {
+            cache.offerFirst(temp.pollFirst());
+        }
+    }
 
-        for (SenderElement element : window) {
-            if (!element.isAcked()) {
-                sender.udt_send(element.getTcpPacket());
-                timer = new UDT_Timer();
-                timer.schedule(new GBN_RetransTask(this), DELAY, PERIOD);
-                break;
+    public void handleTimeout() {
+        System.out.println("Timeout occurred, performing retransmission.");
+        congestion.onTimeout();
+        synchronized (this) {
+            cache.drainTo(window);
+            window.drainTo(cache);
+        }
+        timer.cancel();
+        trySendPackets();
+    }
+
+    public synchronized void trySendPackets() {
+        while (!cache.isEmpty() && window.size() < congestion.getCwnd()) {
+            SenderElement element = cache.pollFirst();
+            if (element == null || element.isAcked() || element.getTcpPacket().getTcpH().getTh_seq() <= lastAck) {
+                continue;
+            }
+            sender.udt_send(element.getTcpPacket());
+            window.offerLast(element);
+            if (window.size() == 1) {
+                resetTimer();
             }
         }
     }

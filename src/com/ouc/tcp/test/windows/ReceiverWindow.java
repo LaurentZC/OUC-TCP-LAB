@@ -2,7 +2,6 @@ package com.ouc.tcp.test.windows;
 
 import com.ouc.tcp.message.TCP_PACKET;
 import com.ouc.tcp.test.elements.ReceiverElement;
-import com.ouc.tcp.test.elements.ReceiverElementFlag;
 
 /**
  * 接收方滑动窗口
@@ -22,8 +21,6 @@ public class ReceiverWindow {
         this.size = size;
         this.window = new ReceiverElement[size];
         this.base = 0;
-
-        // 模板方法：初始化窗口
         for (int i = 0; i < size; i++) {
             window[i] = new ReceiverElement();
         }
@@ -39,7 +36,6 @@ public class ReceiverWindow {
         return seq % size;
     }
 
-
     /**
      * 获取下一个可交付的数据包
      * 当窗口基序号对应的数据包已缓冲时，将其取出并滑动窗口
@@ -51,7 +47,6 @@ public class ReceiverWindow {
         if (!window[getIdx(base)].isBuffered()) {
             return null;  // 基序号数据包未就绪，无法交付
         }
-
         // 获取基序号数据包
         TCP_PACKET packet = window[getIdx(base)].getTcpPacket();
         // 重置窗口元素
@@ -72,24 +67,24 @@ public class ReceiverWindow {
     public AckState bufferPacket(TCP_PACKET packet) {
         // 计算数据包序号（从 1 开始的逻辑序号转换为窗口内的相对序号）
         int seq = (packet.getTcpH().getTh_seq() - 1) / packet.getTcpS().getData().length;
-
         // 情况 1：数据包序号超出接收窗口范围
         if (seq >= base + size) {
             // 数据包超出窗口右边界，可能是未来数据包
-            return AckState.DISORDERED;  // 返回无序到达状态
+            return AckState.OUTOFWINDOW;  // 返回无序到达状态
         }
-
         // 情况2：数据包序号小于窗口基序号
         if (seq < base) {
             // 数据包序号在窗口左边界之前，可能是重复或过时数据包
             return AckState.DUPLICATE;  // 返回重复到达状态
         }
-
-        // 情况 3：数据包序号在窗口范围内
+        // 情况 3 & 4：数据包序号在窗口范围内
         // 将数据包缓冲到窗口中的对应位置
-        window[getIdx(seq)].setElement(packet, ReceiverElementFlag.BUFFERED.ordinal());
-
-        // 返回有序到达状态
+        window[getIdx(seq)].setElement(packet, true);
+        // 情况 3：数据包序号等于窗口基序号
+        if (seq == base) {
+            return AckState.BASE;
+        }
+        // 情况 4：返回有序到达状态
         return AckState.ORDERED;
     }
 }

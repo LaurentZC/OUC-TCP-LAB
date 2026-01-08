@@ -18,21 +18,15 @@ public class TcpRenoCongestionControl {
     private final PrintWriter csvWriter;
     private final DateTimeFormatter timeFormatter = DateTimeFormatter.ofPattern("HH:mm:ss.SSS");
 
-    private void logToCsv(String message) {
-        if (csvWriter == null) {
-            return;
-        }
-        if (message == null) {
-            message = state.toString();
-        }
+    private void logToCsv() {
         String timestamp = LocalTime.now().format(timeFormatter);
-        csvWriter.printf("%s,%d,%d,%s%n", timestamp, cwnd, ssthresh, message);
+        csvWriter.printf("%s,%d,%d,%s%n", timestamp, cwnd, ssthresh, state.toString());
         csvWriter.flush();
     }
 
     public TcpRenoCongestionControl(PrintWriter csvWriter) {
         this.csvWriter = csvWriter;
-        logToCsv(null);
+        logToCsv();
     }
 
     public void onAck(int acked) {
@@ -49,25 +43,24 @@ public class TcpRenoCongestionControl {
     private int slowStart(int acked) {
         int newCwnd = Math.min(cwnd + acked, ssthresh);
         int usedAcked = newCwnd - cwnd;
-
-        cwnd = Math.min(newCwnd, cwnd * 2);
+        cwnd = newCwnd;
         cwndPrecise = cwnd;
-        logToCsv(null);
+        logToCsv();
         return acked - usedAcked;
     }
 
     private void congestionAvoidance(int acked) {
         cwndPrecise += (double) acked / cwnd;
         cwnd = (int) cwndPrecise;
-        logToCsv(null);
+        logToCsv();
     }
 
     public void onTimeout() {
+        state = TcpRenoState.SLOW_START;
         ssthresh = Math.max(cwnd / 2, 2);
         cwnd = 1;
         cwndPrecise = 1.0;
-        state = TcpRenoState.SLOW_START;
-        logToCsv(null);
+        logToCsv();
     }
 
     public void onFastRetransmit() {
@@ -75,12 +68,28 @@ public class TcpRenoCongestionControl {
         ssthresh = Math.max(cwnd / 2, 2);
         cwnd = ssthresh;
         cwndPrecise = cwnd;
-        // 快重传后进入拥塞避免
-        state = TcpRenoState.CONGESTION_AVOIDANCE;
-        logToCsv("fast retransmit");
+        state = TcpRenoState.FAST_RECOVERY;
+        logToCsv();
+    }
+
+    public void onFastRecovery() {
+        state = TcpRenoState.FAST_RECOVERY;
+        cwnd++;
+        cwndPrecise = cwnd;
+        logToCsv();
     }
 
     public int getCwnd() {
         return cwnd;
+    }
+
+    public TcpRenoState getRenoState() {
+        return state;
+    }
+
+    public void endFatRecovery() {
+        state = TcpRenoState.CONGESTION_AVOIDANCE;
+        cwnd = ssthresh;
+        cwndPrecise = cwnd;
     }
 }
