@@ -33,21 +33,34 @@ public class TCP_Receiver extends TCP_Receiver_ADT {
         int dataLen = recvPack.getTcpS().getData().length;
         int dataSeq = (recvPack.getTcpH().getTh_seq() - 1) / dataLen;
         // 检查校验码，生成 ACK
-        // 如果接受到的数据包序号小于等于期待的序号，且校验和正确：可能是重传包，接收
-        if (CheckSum.computeChkSum(recvPack) == recvPack.getTcpH().getTh_sum() && dataSeq <= sequence) {
-            // 生成 ACK 报文段（设置确认号）
-            tcpH.setTh_ack(recvPack.getTcpH().getTh_seq());
-            // 创建并发送 ACK 包
+        if (CheckSum.computeChkSum(recvPack) == recvPack.getTcpH().getTh_sum()) {
+            // 如果接受到的数据包序号小于等于期待的序号，可能是重传包，接收
+            if (dataSeq <= sequence) {
+                // 生成 ACK 报文段（设置确认号）
+                tcpH.setTh_ack(recvPack.getTcpH().getTh_seq());
+                // 创建并发送 ACK 包
+                ackPack = new TCP_PACKET(tcpH, tcpS, recvPack.getSourceAddr());
+                tcpH.setTh_sum(CheckSum.computeChkSum(ackPack));
+                ackPack.setTcpH(tcpH);
+                reply(ackPack);
+                // 将接收到的正确有序的数据插入 data 队列，准备交付
+                if (dataSeq == sequence) {
+                    sequence = dataSeq + 1;
+                    dataQueue.add(recvPack.getTcpS().getData());
+                }
+            }
+        } else {
+            System.out.println("Recieve Computed: " + CheckSum.computeChkSum(recvPack));
+            System.out.println("Recieved Packet" + recvPack.getTcpH().getTh_sum());
+            System.out.println("Problem: Packet Number: " + recvPack.getTcpH().getTh_seq() + " + InnerSeq:  " + sequence);
+            // 不使用 NAK，使用上一个包的序号表达否认
+            tcpH.setTh_ack((sequence - 1) * dataLen + 1);
             ackPack = new TCP_PACKET(tcpH, tcpS, recvPack.getSourceAddr());
             tcpH.setTh_sum(CheckSum.computeChkSum(ackPack));
+            // 回复 ACK 报文段
             reply(ackPack);
-
-            // 将接收到的正确有序的数据插入 data 队列，准备交付
-            if (dataSeq == sequence) {
-                sequence = dataSeq + 1;
-                dataQueue.add(recvPack.getTcpS().getData());
-            }
         }
+
         System.out.println();
         // 交付数据（每 20 组数据交付一次）
         if (dataQueue.size() == 20)
