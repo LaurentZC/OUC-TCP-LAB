@@ -12,7 +12,6 @@ import com.ouc.tcp.test.reno.TcpRenoState;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.PrintWriter;
-import java.util.Iterator;
 import java.util.concurrent.LinkedBlockingDeque;
 
 /**
@@ -58,7 +57,7 @@ public class SenderWindow {
         }
     }
 
-    public synchronized void pushTcpPacket(TCP_PACKET packet) {
+    public void pushTcpPacket(TCP_PACKET packet) {
         cache.offerLast(new SenderElement(packet, SenderElementFlag.NOT_ACKED.ordinal()));
         trySendPackets();
     }
@@ -120,32 +119,19 @@ public class SenderWindow {
     }
 
     private synchronized void updateWindow() {
-        if (window.size() <= congestion.getCwnd()) {
-            return;
-        }
-        LinkedBlockingDeque<SenderElement> temp = new LinkedBlockingDeque<>();
-        Iterator<SenderElement> iterator = window.iterator();
-        int count = 0;
-        while (count < congestion.getCwnd() && iterator.hasNext()) {
-            iterator.next();
-            count++;
-        }
-        while (iterator.hasNext()) {
-            temp.offerFirst(iterator.next());
-            iterator.remove();
-        }
-        while (!temp.isEmpty()) {
-            cache.offerFirst(temp.pollFirst());
+        int cwnd = congestion.getCwnd();
+
+        while (window.size() > cwnd) {
+            SenderElement removed = window.pollLast();
+            if (removed != null) {
+                cache.offerFirst(removed);
+            }
         }
     }
 
     public void handleTimeout() {
-        System.out.println("Timeout occurred, performing retransmission.");
         congestion.onTimeout();
-        synchronized (this) {
-            cache.drainTo(window);
-            window.drainTo(cache);
-        }
+        updateWindow();
         timer.cancel();
         trySendPackets();
     }
@@ -153,7 +139,7 @@ public class SenderWindow {
     public synchronized void trySendPackets() {
         while (!cache.isEmpty() && window.size() < congestion.getCwnd()) {
             SenderElement element = cache.pollFirst();
-            if (element == null || element.isAcked() || element.getTcpPacket().getTcpH().getTh_seq() <= lastAck) {
+            if (element == null || element.getTcpPacket().getTcpH().getTh_seq() <= lastAck) {
                 continue;
             }
             sender.udt_send(element.getTcpPacket());
