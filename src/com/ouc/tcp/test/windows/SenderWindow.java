@@ -7,7 +7,6 @@ import com.ouc.tcp.test.TCP_Sender;
 import com.ouc.tcp.test.elements.SenderElement;
 import com.ouc.tcp.test.elements.SenderElementFlag;
 import com.ouc.tcp.test.reno.TcpRenoCongestionControl;
-import com.ouc.tcp.test.reno.TcpRenoState;
 
 import java.io.FileWriter;
 import java.io.IOException;
@@ -26,8 +25,8 @@ public class SenderWindow {
     private final TcpRenoCongestionControl congestion;
     private final TCP_Sender sender;
     private UDT_Timer timer;
-    private static final int DELAY = 2500;
-    private static final int PERIOD = 2500;
+    private static final int DELAY = 1500;
+    private static final int PERIOD = 1500;
 
     private int lastAck = -1;
     private int dupAckCount = 0;
@@ -82,9 +81,7 @@ public class SenderWindow {
         }
         lastAck = ack;
         dupAckCount = 1;
-        if (congestion.getRenoState() == TcpRenoState.FAST_RECOVERY) {
-            congestion.endFatRecovery();
-        }
+        congestion.endFastRecovery();
 
         // 更新拥塞窗口
         if (acked > 0) {

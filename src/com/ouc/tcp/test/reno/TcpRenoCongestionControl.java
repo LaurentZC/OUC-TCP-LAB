@@ -79,17 +79,17 @@ public class TcpRenoCongestionControl {
         logToCsv();
     }
 
-    public int getCwnd() {
-        return cwnd;
-    }
-
-    public TcpRenoState getRenoState() {
-        return state;
-    }
-
-    public void endFatRecovery() {
+    public void endFastRecovery() {
+        if (state != TcpRenoState.FAST_RECOVERY) {
+            return;
+        }
         state = TcpRenoState.CONGESTION_AVOIDANCE;
         cwnd = ssthresh;
         cwndPrecise = cwnd;
+        logToCsv();
+    }
+
+    public int getCwnd() {
+        return cwnd;
     }
 }
