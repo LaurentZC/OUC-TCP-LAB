@@ -44,36 +44,36 @@ public class TCP_Receiver extends TCP_Receiver_ADT {
         AckState bufferResult = window.bufferPacket(recvPack);
         System.out.println("Buffering result: 包 " + recvPack.getTcpH().getTh_seq() + " " + bufferResult);
 
-        // 如果是窗口左边界的数据包，计时 500ms 等到其他包
-        if (bufferResult == AckState.ORDERED || bufferResult == AckState.DUPLICATE) {
-            // 处理所有可交付的数据包
-            TCP_PACKET packet = window.getPacketToDeliver();
-
-            while (packet != null) {
-                // 提取数据并放入交付队列
-                dataQueue.add(packet.getTcpS().getData());
-                // 准备 ACK 报文段
-                tcpH.setTh_ack(packet.getTcpH().getTh_seq());
-                ackPack = new TCP_PACKET(tcpH, tcpS, recvPack.getSourceAddr());
-                tcpH.setTh_sum(CheckSum.computeChkSum(ackPack));
-                // 获取下一个可交付的数据包
-                packet = window.getPacketToDeliver();
-            }
-
-            // 设置延迟 ACK
-            if (timer != null) {
-                timer.cancel();
-                timer = new UDT_Timer();
-                timer.schedule(
-                        new TimerTask() {
-                            @Override
-                            public void run() {
-                                reply(ackPack);
-                            }
-                        }, 500
-                );
-            }
+        // 如果不是窗口左边界的数据包，立即回复 ACK 报文段
+        if (bufferResult != AckState.BASE) {
+            reply(ackPack);
+            return;
         }
+
+        // 处理所有可交付的数据包
+        TCP_PACKET packet = window.getPacketToDeliver();
+        while (packet != null) {
+            // 提取数据并放入交付队列
+            dataQueue.add(packet.getTcpS().getData());
+            // 准备 ACK 报文段
+            tcpH.setTh_ack(packet.getTcpH().getTh_seq());
+            ackPack = new TCP_PACKET(tcpH, tcpS, recvPack.getSourceAddr());
+            tcpH.setTh_sum(CheckSum.computeChkSum(ackPack));
+            // 获取下一个可交付的数据包
+            packet = window.getPacketToDeliver();
+        }
+
+        // 设置延迟 ACK
+        timer.cancel();
+        timer = new UDT_Timer();
+        timer.schedule(
+                new TimerTask() {
+                    @Override
+                    public void run() {
+                        reply(ackPack);
+                    }
+                }, 500
+        );
 
         System.out.println();
         // 交付数据
@@ -85,13 +85,10 @@ public class TCP_Receiver extends TCP_Receiver_ADT {
     public void deliver_data() {
         // 检查 dataQueue，将数据写入文件
         File fw = new File("recvData.txt");
-
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(fw, true))) {
-
             // 循环检查 data 队列中是否有新交付数据
             while (!dataQueue.isEmpty()) {
                 int[] data = dataQueue.poll();
-
                 // 将数据写入文件
                 for (int datum : data) {
                     writer.write(datum + "\n");
@@ -119,9 +116,7 @@ public class TCP_Receiver extends TCP_Receiver_ADT {
          * 7. 出错/丢包/延迟
          */
         tcpH.setTh_eflag((byte) 7);
-
         // 发送数据报
         client.send(replyPack);
     }
-
 }

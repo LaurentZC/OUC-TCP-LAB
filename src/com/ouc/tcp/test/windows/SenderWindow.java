@@ -63,10 +63,6 @@ public class SenderWindow {
         }
     }
 
-    public boolean isEmpty() {
-        return window.isEmpty();
-    }
-
     public boolean isCwndFull() {
         return window.size() >= cwnd;
     }
@@ -74,18 +70,18 @@ public class SenderWindow {
     private void resetTimer() {
         timer.cancel();
         timer = new UDT_Timer();
-        if (!isEmpty()) {
+        if (!window.isEmpty()) {
             timer.schedule(new GBN_RetransTask(this), DELAY, PERIOD);
         }
     }
 
     public void pushTcpPacket(TCP_PACKET packet) {
-        if (isEmpty()) {
+        if (window.isEmpty()) {
             timer = new UDT_Timer();
             timer.schedule(new GBN_RetransTask(this), DELAY, PERIOD);
         }
         sender.udt_send(packet);
-        window.push(new SenderElement(packet, SenderElementFlag.NOT_ACKED.ordinal()));
+        window.addLast(new SenderElement(packet, SenderElementFlag.NOT_ACKED.ordinal()));
     }
 
 
@@ -94,48 +90,64 @@ public class SenderWindow {
         while (iterator.hasNext()) {
             SenderElement element = iterator.next();
             if (element.getTcpPacket().getTcpH().getTh_seq() > ack) {
-                continue;
+                break;
             }
             element.ackPacket();
             iterator.remove();
             if (cwnd < ssthresh) {
                 cwnd++;
                 cwndPrecise = cwnd;
+            } else {
+                cwndPrecise += 1.0 / cwnd;
+                cwnd = (int) cwndPrecise;
             }
             resetTimer();
-        }
-
-        if (cwnd >= ssthresh) {
-            cwndPrecise += 1.0 / cwnd;
-            cwnd = (int) cwndPrecise;
         }
 
         logToCsv();
 
         // 检测重复 ACK
-        if (ack == lastAck) {
-            dupAckCount++;
-            System.out.println("Duplicate ACK " + dupAckCount + " for seq: " + ack);
-        } else {
+        if (ack != lastAck) {
             lastAck = ack;
             dupAckCount = 1;
+            return;
+        }
+
+        dupAckCount++;
+        System.out.println("Duplicate ACK " + dupAckCount + " for seq: " + ack);
+        // 快重传
+        if (dupAckCount == DUP_ACK_THRESHOLD) {
+            ssthresh = Math.max(cwnd / 2, 2);
+            cwnd = 1;
+            cwndPrecise = cwnd;
+            fastRetransmit(ack);
+            logToCsv();
+        }
+    }
+
+    private void fastRetransmit(int ack) {
+        int expectedSeq = ack + 100;
+        for (SenderElement element : window) {
+            int seq = element.getTcpPacket().getTcpH().getTh_seq();
+            if (seq == expectedSeq) {
+                sender.udt_send(element.getTcpPacket());
+                System.out.println("Fast retransmit packet with seq: " + seq);
+                break;
+            }
         }
     }
 
     public void handleTimeout() {
         System.out.println("Timeout occurred. Retransmitting all packets.\n");
-
         // 更新 cwnd 和 ssthresh
         ssthresh = Math.max(cwnd / 2, 2);
         cwnd = 1;
         cwndPrecise = cwnd;
-
         for (SenderElement element : window) {
             if (!element.isAcked()) {
                 sender.udt_send(element.getTcpPacket());
             }
         }
-
         resetTimer();
         logToCsv();
     }

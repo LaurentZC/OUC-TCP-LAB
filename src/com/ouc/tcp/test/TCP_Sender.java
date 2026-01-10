@@ -38,7 +38,7 @@ public class TCP_Sender extends TCP_Sender_ADT {
 
         // 如果窗口满，等待窗口有空间
         while (window.isCwndFull()) {
-            Thread.yield();
+            Thread.onSpinWait();
         }
 
         try {
