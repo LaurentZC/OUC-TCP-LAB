@@ -130,10 +130,14 @@ public class SenderWindow {
     }
 
     public void handleTimeout() {
+        timer.cancel();
         congestion.onTimeout();
         updateWindow();
-        timer.cancel();
-        trySendPackets();
+        SenderElement retransmitElement = window.peekFirst();
+        if (retransmitElement != null) {
+            sender.udt_send(retransmitElement.getTcpPacket());
+        }
+        resetTimer();
     }
 
     public synchronized void trySendPackets() {
